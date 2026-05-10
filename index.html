@@ -1018,11 +1018,6 @@
                     <label for="back-mode-timer-input" style="color: #2e7d32; font-weight: bold; font-size: 0.9rem;">时间(秒):</label>
                     <input type="number" id="back-mode-timer-input" min="1" max="300" value="10" style="width: 60px; padding: 5px; border: 1px solid #4CAF50; border-radius: 4px; font-size: 0.9rem;">
                 </div>
-                <!-- 自动朗读设置 -->
-                <div id="auto-read-settings">
-                    <label for="auto-read-toggle" style="color: #1976d2; font-weight: bold; font-size: 0.9rem;">自动朗读:</label>
-                    <input type="checkbox" id="auto-read-toggle">
-                </div>
                 <!-- TTS配置按钮 -->
                 <button id="ttsConfigButton" class="button button-primary">🔊 TTS设置</button>
                 <!-- 添加捐赠按钮 -->
@@ -1053,6 +1048,29 @@
                 <select id="tts-voice-select" style="flex: 1; padding: 5px; border: 1px solid #ddd; border-radius: 4px;">
                     <option value="">自动选择中文语音</option>
                 </select>
+            </div>
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
+                <h4 style="margin-top: 0; margin-bottom: 15px; color: #444;">自动朗读设置</h4>
+                <div class="tts-control-group">
+                    <label>📖 自动朗读题目:</label>
+                    <input type="checkbox" id="auto-read-question" style="width: 20px; height: 20px;">
+                </div>
+                <div class="tts-control-group">
+                    <label>🔤 自动朗读选项:</label>
+                    <input type="checkbox" id="auto-read-options" style="width: 20px; height: 20px;">
+                </div>
+                <div class="tts-control-group">
+                    <label>✅ 自动朗读答案:</label>
+                    <input type="checkbox" id="auto-read-answer" style="width: 20px; height: 20px;">
+                </div>
+                <div class="tts-control-group">
+                    <label>💡 自动朗读解析:</label>
+                    <input type="checkbox" id="auto-read-explanation" style="width: 20px; height: 20px;">
+                </div>
+                <div class="tts-control-group">
+                    <label>🔄 朗读完毕自动下一题:</label>
+                    <input type="checkbox" id="auto-read-next" style="width: 20px; height: 20px;">
+                </div>
             </div>
             <div style="margin-top: 15px; display: flex; gap: 10px;">
                 <button id="tts-test-button" class="button button-primary" style="padding: 8px 15px;">测试语音</button>
@@ -1105,9 +1123,12 @@
                         <div id="options"></div>
                         <div id="answer-result" style="margin-top: 20px;"></div>
                           
-                        <div style="margin-top: 20px;">
-                            <button id="readQuestionButton" class="button button-warning">🔊 读题</button>
-                            <button id="stopReadingButton" class="button button-danger hidden">⏹️ 停止</button>
+                        <div id="tts-controls" style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                            <button id="readQuestionButton" class="button button-warning">📖 朗读题目</button>
+                            <button id="readOptionsButton" class="button button-primary">🔤 朗读选项</button>
+                            <button id="readAnswerButton" class="button button-success">✅ 朗读答案</button>
+                            <button id="readExplanationButton" class="button button-info" style="background-color: #00bcd4; color: white;">💡 朗读解析</button>
+                            <button id="stopReadingButton" class="button button-danger hidden">⏹️ 停止朗读</button>
                         </div>
                           
                         <div id="answer-container" class="hidden">
@@ -1366,7 +1387,11 @@
                     pitch: 1.0,
                     voice: null,
                     testText: "这是一个测试语音，用于检测语音合成功能是否正常工作。",
-                    autoRead: false  // 新增：是否自动朗读
+                    autoReadQuestion: false,   // 是否自动朗读题目
+                    autoReadOptions: false,    // 是否自动朗读选项
+                    autoReadAnswer: false,     // 是否自动朗读答案
+                    autoReadExplanation: false,// 是否自动朗读解析
+                    autoNext: false            // 是否朗读完毕自动下一题
                 },
                 
                 // TTS状态
@@ -1374,7 +1399,9 @@
                     isSpeaking: false,
                     currentUtterance: null,
                     availableVoices: [],
-                    manualRead: false  // 新增：是否手动点击了朗读
+                    manualRead: false,  // 新增：是否手动点击了朗读
+                    currentType: null,
+                    readQueue: []
                 }
             },
             
@@ -1914,31 +1941,89 @@
                 }
                 
                 const questionText = this.cleanQuestionText(currentQuestion.题干);
+                this.showToast('开始朗读题目', 'success');
+                this.speakText(questionText, 'question');
+            },
+            
+            // 朗读选项
+            readOptions() {
+                const currentQuestion = this.getCurrentQuestion();
+                if (!currentQuestion) {
+                    this.showToast('当前没有题目', 'warning');
+                    return;
+                }
+
+                const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+                let optionsText = '';
                 
+                optionLetters.forEach((letter) => {
+                    const optionKey = `选项${letter}`;
+                    if (currentQuestion[optionKey]) {
+                        optionsText += `${letter}选项，${currentQuestion[optionKey]}。`;
+                    }
+                });
+
+                if (!optionsText) {
+                    this.showToast('当前题目没有选项', 'warning');
+                    return;
+                }
+
+                this.speakText(optionsText, 'options');
+            },
+
+            // 朗读答案
+            readAnswer() {
+                const currentQuestion = this.getCurrentQuestion();
+                if (!currentQuestion || !currentQuestion.答案) {
+                    this.showToast('当前没有答案可朗读', 'warning');
+                    return;
+                }
+
+                let answerText = '';
+                if (currentQuestion.类型 === '多选') {
+                    const answers = [...currentQuestion.答案];
+                    answerText = `正确答案是${answers.join('、')}选项。`;
+                } else {
+                    answerText = `正确答案是${currentQuestion.答案}选项。`;
+                }
+
+                this.speakText(answerText, 'answer');
+            },
+
+            // 朗读解析
+            readExplanation() {
+                const currentQuestion = this.getCurrentQuestion();
+                if (!currentQuestion || !currentQuestion.解析) {
+                    this.showToast('当前没有解析可朗读', 'warning');
+                    return;
+                }
+
+                const explanationText = `解析，${currentQuestion.解析}`;
+                this.speakText(explanationText, 'explanation');
+            },
+
+            // 通用朗读方法
+            speakText(text, type = 'general') {
                 // 检查浏览器支持
                 if (!('speechSynthesis' in window)) {
                     this.showToast('您的浏览器不支持语音合成功能', 'error');
                     return;
                 }
-                
+
                 // 如果正在朗读，先停止
                 if (this.data.ttsState.isSpeaking) {
-                    this.stopReading();
-                    return;
+                    speechSynthesis.cancel();
                 }
-                
-                // 标记为手动朗读
-                this.data.ttsState.manualRead = true;
-                
+
                 // 创建语音实例
-                const utterance = new SpeechSynthesisUtterance(questionText);
-                
-                // 配置语音参数 - 调用安卓系统TTS引擎
+                const utterance = new SpeechSynthesisUtterance(text);
+
+                // 配置语音参数
                 utterance.rate = this.data.ttsConfig.rate;
                 utterance.volume = this.data.ttsConfig.volume;
                 utterance.pitch = this.data.ttsConfig.pitch;
                 utterance.lang = 'zh-CN';
-                
+
                 // 设置语音
                 if (this.data.ttsConfig.voice) {
                     const selectedVoice = this.data.ttsState.availableVoices.find(
@@ -1948,112 +2033,119 @@
                         utterance.voice = selectedVoice;
                     }
                 }
-                
+
                 // 事件监听
                 utterance.onstart = () => {
                     this.data.ttsState.isSpeaking = true;
                     this.data.ttsState.currentUtterance = utterance;
+                    this.data.ttsState.currentType = type;
                     this.updateReadButtonState(true);
-                    this.showToast('开始朗读题目', 'success');
                 };
-                
+
                 utterance.onend = () => {
                     this.data.ttsState.isSpeaking = false;
                     this.data.ttsState.currentUtterance = null;
-                    // 朗读结束后重置手动朗读标志
-                    this.data.ttsState.manualRead = false;
+                    this.data.ttsState.currentType = null;
+                    
+                    // 检查是否需要继续朗读队列中的内容
+                    if (this.data.ttsState.readQueue && this.data.ttsState.readQueue.length > 0) {
+                        const nextItem = this.data.ttsState.readQueue.shift();
+                        this.speakText(nextItem.text, nextItem.type);
+                        return;
+                    }
+                    
                     this.updateReadButtonState(false);
+
+                    // 如果开启了自动下一题，自动切换到下一题
+                    if (this.data.ttsConfig.autoNext) {
+                        setTimeout(() => {
+                            this.nextQuestion();
+                        }, 500);
+                    }
                 };
-                
+
                 utterance.onerror = (event) => {
                     console.error('语音合成错误:', event.error);
                     this.data.ttsState.isSpeaking = false;
                     this.data.ttsState.currentUtterance = null;
-                    this.data.ttsState.manualRead = false;
+                    this.data.ttsState.currentType = null;
+                    this.data.ttsState.readQueue = [];
                     this.updateReadButtonState(false);
-                    
-                    if (event.error === 'interrupted') {
-                        this.showToast('朗读已停止', 'info');
-                    } else {
-                        this.showToast(`朗读失败: ${event.error}`, 'error');
-                    }
                 };
-                
+
                 // 开始朗读
                 speechSynthesis.speak(utterance);
             },
-            
-            // 自动朗读（只在切换题目且启用了自动朗读时才调用）
-            autoReadQuestion() {
-                // 只有在开启了自动朗读且不是手动朗读时才自动朗读
-                if (this.data.ttsConfig.autoRead && !this.data.ttsState.manualRead) {
-                    const currentQuestion = this.getCurrentQuestion();
-                    if (!currentQuestion || !currentQuestion.题干) {
-                        return;
-                    }
-                    
-                    const questionText = this.cleanQuestionText(currentQuestion.题干);
-                    
-                    // 检查浏览器支持
-                    if (!('speechSynthesis' in window)) {
-                        return;
-                    }
-                    
-                    // 如果正在朗读，先停止
-                    if (this.data.ttsState.isSpeaking) {
-                        speechSynthesis.cancel();
-                    }
-                    
-                    // 创建语音实例
-                    const utterance = new SpeechSynthesisUtterance(questionText);
-                    
-                    // 配置语音参数
-                    utterance.rate = this.data.ttsConfig.rate;
-                    utterance.volume = this.data.ttsConfig.volume;
-                    utterance.pitch = this.data.ttsConfig.pitch;
-                    utterance.lang = 'zh-CN';
-                    
-                    // 设置语音
-                    if (this.data.ttsConfig.voice) {
-                        const selectedVoice = this.data.ttsState.availableVoices.find(
-                            voice => voice.name === this.data.ttsConfig.voice
-                        );
-                        if (selectedVoice) {
-                            utterance.voice = selectedVoice;
+
+            // 开始自动朗读序列（根据配置依次朗读）
+            startAutoReadSequence() {
+                const config = this.data.ttsConfig;
+                const queue = [];
+                const currentQuestion = this.getCurrentQuestion();
+                
+                if (!currentQuestion) return;
+
+                // 构建朗读队列
+                if (config.autoReadQuestion && currentQuestion.题干) {
+                    queue.push({
+                        text: this.cleanQuestionText(currentQuestion.题干),
+                        type: 'question'
+                    });
+                }
+
+                if (config.autoReadOptions) {
+                    const optionLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+                    let optionsText = '';
+                    optionLetters.forEach((letter) => {
+                        const optionKey = `选项${letter}`;
+                        if (currentQuestion[optionKey]) {
+                            optionsText += `${letter}选项，${currentQuestion[optionKey]}。`;
                         }
+                    });
+                    if (optionsText) {
+                        queue.push({
+                            text: optionsText,
+                            type: 'options'
+                        });
                     }
-                    
-                    // 事件监听
-                    utterance.onstart = () => {
-                        this.data.ttsState.isSpeaking = true;
-                        this.data.ttsState.currentUtterance = utterance;
-                        this.updateReadButtonState(true);
-                    };
-                    
-                    utterance.onend = () => {
-                        this.data.ttsState.isSpeaking = false;
-                        this.data.ttsState.currentUtterance = null;
-                        this.updateReadButtonState(false);
-                    };
-                    
-                    utterance.onerror = (event) => {
-                        console.error('自动朗读错误:', event.error);
-                        this.data.ttsState.isSpeaking = false;
-                        this.data.ttsState.currentUtterance = null;
-                        this.updateReadButtonState(false);
-                    };
-                    
-                    // 开始朗读
-                    speechSynthesis.speak(utterance);
+                }
+
+                if (config.autoReadAnswer && currentQuestion.答案) {
+                    let answerText = '';
+                    if (currentQuestion.类型 === '多选') {
+                        const answers = [...currentQuestion.答案];
+                        answerText = `正确答案是${answers.join('、')}选项。`;
+                    } else {
+                        answerText = `正确答案是${currentQuestion.答案}选项。`;
+                    }
+                    queue.push({
+                        text: answerText,
+                        type: 'answer'
+                    });
+                }
+
+                if (config.autoReadExplanation && currentQuestion.解析) {
+                    queue.push({
+                        text: `解析，${currentQuestion.解析}`,
+                        type: 'explanation'
+                    });
+                }
+
+                // 如果有内容需要朗读
+                if (queue.length > 0) {
+                    this.data.ttsState.readQueue = queue.slice(1); // 除了第一个，其余加入队列
+                    this.speakText(queue[0].text, queue[0].type);
                 }
             },
-            
+
             // 停止朗读
             stopReading() {
                 if (this.data.ttsState.isSpeaking && speechSynthesis.speaking) {
                     speechSynthesis.cancel();
                     this.data.ttsState.isSpeaking = false;
                     this.data.ttsState.currentUtterance = null;
+                    this.data.ttsState.currentType = null;
+                    this.data.ttsState.readQueue = [];
                     this.data.ttsState.manualRead = false;
                     this.updateReadButtonState(false);
                     this.showToast('朗读已停止', 'info');
@@ -2075,16 +2167,25 @@
             
             // 更新读题按钮状态
             updateReadButtonState(isSpeaking) {
-                const readButton = document.getElementById('readQuestionButton');
+                const readQuestionButton = document.getElementById('readQuestionButton');
+                const readOptionsButton = document.getElementById('readOptionsButton');
+                const readAnswerButton = document.getElementById('readAnswerButton');
+                const readExplanationButton = document.getElementById('readExplanationButton');
                 const stopButton = document.getElementById('stopReadingButton');
                 
                 if (isSpeaking) {
-                    readButton.classList.add('reading');
-                    readButton.innerHTML = '🔊 停止朗读';
+                    readQuestionButton.classList.add('reading');
+                    readQuestionButton.innerHTML = '⏹️ 停止朗读';
+                    readOptionsButton.disabled = true;
+                    readAnswerButton.disabled = true;
+                    readExplanationButton.disabled = true;
                     stopButton.classList.remove('hidden');
                 } else {
-                    readButton.classList.remove('reading');
-                    readButton.innerHTML = '🔊 读题';
+                    readQuestionButton.classList.remove('reading');
+                    readQuestionButton.innerHTML = '📖 朗读题目';
+                    readOptionsButton.disabled = false;
+                    readAnswerButton.disabled = false;
+                    readExplanationButton.disabled = false;
                     stopButton.classList.add('hidden');
                 }
             },
@@ -2195,7 +2296,26 @@
                 
                 // 读题按钮
                 document.getElementById('readQuestionButton').addEventListener('click', () => {
-                    this.readQuestion();
+                    if (this.data.ttsState.isSpeaking) {
+                        this.stopReading();
+                    } else {
+                        this.readQuestion();
+                    }
+                });
+                
+                // 朗读选项按钮
+                document.getElementById('readOptionsButton').addEventListener('click', () => {
+                    this.readOptions();
+                });
+                
+                // 朗读答案按钮
+                document.getElementById('readAnswerButton').addEventListener('click', () => {
+                    this.readAnswer();
+                });
+                
+                // 朗读解析按钮
+                document.getElementById('readExplanationButton').addEventListener('click', () => {
+                    this.readExplanation();
                 });
                 
                 // 停止朗读按钮
@@ -2203,12 +2323,52 @@
                     this.stopReading();
                 });
                 
-                // 自动朗读开关
-                document.getElementById('auto-read-toggle').addEventListener('change', (e) => {
-                    this.data.ttsConfig.autoRead = e.target.checked;
+                // 自动朗读题目开关
+                document.getElementById('auto-read-question').addEventListener('change', (e) => {
+                    this.data.ttsConfig.autoReadQuestion = e.target.checked;
                     this.saveToStorage();
                     this.showToast(
-                        e.target.checked ? '已开启自动朗读' : '已关闭自动朗读',
+                        e.target.checked ? '已开启自动朗读题目' : '已关闭自动朗读题目',
+                        e.target.checked ? 'success' : 'info'
+                    );
+                });
+                
+                // 自动朗读选项开关
+                document.getElementById('auto-read-options').addEventListener('change', (e) => {
+                    this.data.ttsConfig.autoReadOptions = e.target.checked;
+                    this.saveToStorage();
+                    this.showToast(
+                        e.target.checked ? '已开启自动朗读选项' : '已关闭自动朗读选项',
+                        e.target.checked ? 'success' : 'info'
+                    );
+                });
+                
+                // 自动朗读答案开关
+                document.getElementById('auto-read-answer').addEventListener('change', (e) => {
+                    this.data.ttsConfig.autoReadAnswer = e.target.checked;
+                    this.saveToStorage();
+                    this.showToast(
+                        e.target.checked ? '已开启自动朗读答案' : '已关闭自动朗读答案',
+                        e.target.checked ? 'success' : 'info'
+                    );
+                });
+                
+                // 自动朗读解析开关
+                document.getElementById('auto-read-explanation').addEventListener('change', (e) => {
+                    this.data.ttsConfig.autoReadExplanation = e.target.checked;
+                    this.saveToStorage();
+                    this.showToast(
+                        e.target.checked ? '已开启自动朗读解析' : '已关闭自动朗读解析',
+                        e.target.checked ? 'success' : 'info'
+                    );
+                });
+                
+                // 自动下一题开关
+                document.getElementById('auto-read-next').addEventListener('change', (e) => {
+                    this.data.ttsConfig.autoNext = e.target.checked;
+                    this.saveToStorage();
+                    this.showToast(
+                        e.target.checked ? '已开启朗读完毕自动下一题' : '已关闭朗读完毕自动下一题',
                         e.target.checked ? 'success' : 'info'
                     );
                 });
@@ -2413,10 +2573,15 @@
                     pitch: 1.0,
                     voice: null,
                     testText: "这是一个测试语音，用于检测语音合成功能是否正常工作。",
-                    autoRead: false
+                    autoReadQuestion: false,
+                    autoReadOptions: false,
+                    autoReadAnswer: false,
+                    autoReadExplanation: false,
+                    autoNext: false
                 };
                 
                 this.data.ttsState.manualRead = false;
+                this.data.ttsState.readQueue = [];
                 
                 // 更新UI
                 document.getElementById('tts-rate').value = 1.0;
@@ -2426,7 +2591,11 @@
                 document.getElementById('tts-pitch').value = 1.0;
                 document.getElementById('tts-pitch-value').textContent = '1.0';
                 document.getElementById('tts-voice-select').value = '';
-                document.getElementById('auto-read-toggle').checked = false;
+                document.getElementById('auto-read-question').checked = false;
+                document.getElementById('auto-read-options').checked = false;
+                document.getElementById('auto-read-answer').checked = false;
+                document.getElementById('auto-read-explanation').checked = false;
+                document.getElementById('auto-read-next').checked = false;
                 
                 this.saveToStorage();
                 this.showToast('TTS设置已重置', 'success');
@@ -2573,69 +2742,49 @@
                             if (!row[0] || !row[0].toString().trim()) return;
                             
                             const questionText = row[0].toString().trim();
-                            const answerText = row[1] ? row[1].toString().trim() : '';
+                            const optionsText = row[1] ? row[1].toString().trim() : '';
+                            const answerIndex = row[2] ? row[2].toString().trim() : '';
                             
-                            if (!answerText) {
+                            if (!answerIndex) {
                                 console.warn(`第${rowIndex + 1}行缺少答案，跳过`);
                                 return;
-                            }
-                            
-                            const correctIndexes = [];
-                            for (let i = 2; i < row.length; i++) {
-                                if (row[i] !== undefined && row[i] !== null && row[i] !== '') {
-                                    const cellValue = row[i].toString().trim();
-                                    const parts = cellValue.split('||');
-                                    parts.forEach(part => {
-                                        const num = parseInt(part.trim());
-                                        if (!isNaN(num) && num > 0) {
-                                            correctIndexes.push(num - 1);
-                                        }
-                                    });
-                                }
                             }
                             
                             let questionType = '单选';
                             let correctAnswer = '';
                             let options = [];
                             
-                            const answerLower = answerText.toLowerCase();
-                            if (answerLower === '对' || answerLower === '错' || 
-                                answerLower === '正确' || answerLower === '错误' ||
-                                answerLower === 'true' || answerLower === 'false') {
-                                questionType = '判断';
-                                correctAnswer = answerLower.includes('对') || answerLower.includes('正确') || answerLower.includes('true') ? '对' : '错';
-                            } else if (answerText.includes('||')) {
-                                options = answerText.split('||').map(opt => opt.trim());
-                                
-                                if (correctIndexes.length > 1) {
-                                    questionType = '多选';
-                                    correctAnswer = correctIndexes
-                                        .filter(index => index >= 0 && index < options.length)
-                                        .sort((a, b) => a - b)
-                                        .map(index => String.fromCharCode(65 + index))
-                                        .join('');
-                                } else if (correctIndexes.length === 1) {
-                                    questionType = '单选';
-                                    const index = correctIndexes[0];
-                                    if (index >= 0 && index < options.length) {
-                                        correctAnswer = String.fromCharCode(65 + index);
-                                    } else {
-                                        correctAnswer = 'A';
+                            // B列选项解析
+                            if (optionsText.includes('||')) {
+                                options = optionsText.split('||').map(opt => opt.trim());
+                            } else if (optionsText === '对||错' || optionsText === '正确||错误') {
+                                options = ['对', '错'];
+                            }
+                            
+                            // C列答案索引（1=A, 2=B, 3=C, 4=D...）
+                            const answerNum = parseInt(answerIndex);
+                            if (!isNaN(answerNum) && answerNum > 0) {
+                                const optionIndex = answerNum - 1;
+                                if (options.length > 0) {
+                                    if (options.length === 2 && (options[0] === '对' || options[0] === '正确')) {
+                                        questionType = '判断';
+                                        correctAnswer = answerNum === 1 ? '对' : '错';
+                                    } else if (optionIndex >= 0 && optionIndex < options.length) {
+                                        correctAnswer = String.fromCharCode(65 + optionIndex);
                                     }
                                 } else {
-                                    questionType = '单选';
-                                    correctAnswer = 'A';
+                                    correctAnswer = String.fromCharCode(64 + answerNum);
                                 }
                             } else {
                                 questionType = '单选';
-                                correctAnswer = answerText;
+                                correctAnswer = answerIndex;
                             }
                             
                             const questionObj = {
                                 题干: questionText.replace(/^第\d+题[：:]\s*/, ''),
                                 答案: correctAnswer,
                                 类型: questionType,
-                                解析: row[Math.min(row.length - 1, 10)] || '',
+                                解析: row[3] ? row[3].toString().trim() : '',
                                 难度: '中等',
                                 分类: '未分类',
                                 分值: this.getQuestionScore(questionType)
@@ -3884,7 +4033,7 @@
                     // 切换题目后，如果开启了自动朗读，则自动朗读新题目
                     // 注意：这里要延迟一小段时间，确保DOM已经更新完成
                     setTimeout(() => {
-                        this.autoReadQuestion();
+                        this.startAutoReadSequence();
                     }, 100);
                 }
             },
@@ -3918,9 +4067,29 @@
                 }
                 
                 // 更新自动朗读开关
-                const autoReadToggle = document.getElementById('auto-read-toggle');
-                if (autoReadToggle) {
-                    autoReadToggle.checked = this.data.ttsConfig.autoRead;
+                const autoReadQuestion = document.getElementById('auto-read-question');
+                if (autoReadQuestion) {
+                    autoReadQuestion.checked = this.data.ttsConfig.autoReadQuestion;
+                }
+                
+                const autoReadOptions = document.getElementById('auto-read-options');
+                if (autoReadOptions) {
+                    autoReadOptions.checked = this.data.ttsConfig.autoReadOptions;
+                }
+                
+                const autoReadAnswer = document.getElementById('auto-read-answer');
+                if (autoReadAnswer) {
+                    autoReadAnswer.checked = this.data.ttsConfig.autoReadAnswer;
+                }
+                
+                const autoReadExplanation = document.getElementById('auto-read-explanation');
+                if (autoReadExplanation) {
+                    autoReadExplanation.checked = this.data.ttsConfig.autoReadExplanation;
+                }
+                
+                const autoReadNext = document.getElementById('auto-read-next');
+                if (autoReadNext) {
+                    autoReadNext.checked = this.data.ttsConfig.autoNext;
                 }
             },
              
@@ -4394,9 +4563,27 @@
                         pitch: 1.0,
                         voice: null,
                         testText: "这是一个测试语音，用于检测语音合成功能是否正常工作。",
-                        autoRead: false
+                        autoReadQuestion: false,
+                        autoReadOptions: false,
+                        autoReadAnswer: false,
+                        autoReadExplanation: false,
+                        autoNext: false
                     };
                 }
+                
+                // 确保所有字段都存在
+                const defaults = {
+                    autoReadQuestion: false,
+                    autoReadOptions: false,
+                    autoReadAnswer: false,
+                    autoReadExplanation: false,
+                    autoNext: false
+                };
+                Object.keys(defaults).forEach(key => {
+                    if (this.data.ttsConfig[key] === undefined) {
+                        this.data.ttsConfig[key] = defaults[key];
+                    }
+                });
                 
                 if (!this.data.ttsState) {
                     this.data.ttsState = {
