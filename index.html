@@ -2754,11 +2754,23 @@
                             let correctAnswer = '';
                             let options = [];
                             
-                            // B列选项解析
+                            // B列选项解析，支持多种分隔格式
                             if (optionsText.includes('||')) {
                                 options = optionsText.split('||').map(opt => opt.trim());
+                            } else if (optionsText.includes('\t')) {
+                                options = optionsText.split('\t').map(opt => opt.trim()).filter(opt => opt);
+                            } else if (/[A-Za-z][．.、][^A-Za-z]/.test(optionsText)) {
+                                const matches = optionsText.match(/[A-Za-z][．.、]\s*[^A-Za-z]+/g);
+                                if (matches) {
+                                    options = matches.map(opt => opt.replace(/^[A-Za-z][．.、]\s*/, '').trim());
+                                }
                             } else if (optionsText === '对||错' || optionsText === '正确||错误') {
                                 options = ['对', '错'];
+                            } else if (optionsText.includes('  ')) {
+                                const parts = optionsText.split(/\s{2,}/).map(opt => opt.trim()).filter(opt => opt);
+                                if (parts.length >= 2) {
+                                    options = parts;
+                                }
                             }
                             
                             // C列答案索引（支持单个数字如"1"或多个数字如"1||3"、"1,3"、"1 3"）
